@@ -259,12 +259,13 @@ $is_igst = $sale['igst_amount'] > 0;
     
     <div class="invoice-container">
         <div class="invoice-header">
-            <h1><?php echo htmlspecialchars($company['company_name']); ?></h1>
-            <div class="tax-invoice">TAX INVOICE</div>
+            <!--h1><?php echo htmlspecialchars($company['company_name']); ?></h1-->
+            <h1><div class="tax-invoice">TAX INVOICE</div></h1>
         </div>
         
         <div class="company-details">
             <h2>Seller Details</h2>
+            <p><strong>Company Name:</strong> <?php echo htmlspecialchars($company['company_name']); ?></p>
             <p><strong>Address:</strong> <?php echo htmlspecialchars($company['address']); ?></p>
             <p><strong>City:</strong> <?php echo htmlspecialchars($company['city']); ?>, <strong>State:</strong> <?php echo htmlspecialchars($company['state']); ?> - <?php echo htmlspecialchars($company['pincode']); ?></p>
             <p><strong>Phone:</strong> <?php echo htmlspecialchars($company['phone']); ?> | <strong>Email:</strong> <?php echo htmlspecialchars($company['email']); ?></p>

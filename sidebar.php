@@ -56,6 +56,24 @@
                 <span class="nav-text">Reports</span>
             </a>
         </li>
+        <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'Calendar.php' ? 'active' : ''; ?>">
+            <a href="Calendar.php">
+                <span class="nav-icon">📅</span>
+                <span class="nav-text">Calendar</span>
+            </a>
+        </li>
+        <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'reminders.php' ? 'active' : ''; ?>">
+            <a href="reminders.php">
+                <span class="nav-icon">🔔</span>
+                <span class="nav-text">Reminders</span>
+            </a>
+        </li>
+        <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'tally.php' ? 'active' : ''; ?>">
+            <a href="tally.php">
+                <span class="nav-icon">🔗</span>
+                <span class="nav-text">Tally Link</span>
+            </a>
+        </li>
     </ul>
     
     <!-- Logout Button -->
