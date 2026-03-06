@@ -127,10 +127,15 @@ $users = $db->fetchAll("SELECT * FROM users ORDER BY role ASC, full_name ASC");
             <?php endif; ?>
 
             <!-- Info box -->
-            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:16px 20px; margin-bottom:1.5rem; font-size:14px; color:#1e40af;">
-                <strong>🔐 Role Permissions:</strong> &nbsp;
-                <span style="background:#dbeafe;padding:3px 10px;border-radius:10px;font-weight:700;margin-right:8px;">ADMIN</span> Full access to everything &nbsp;|&nbsp;
-                <span style="background:#f3f4f6;padding:3px 10px;border-radius:10px;font-weight:700;margin-right:8px;">USER</span> Can only create sales &amp; view products/customers
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:16px 20px; margin-bottom:1.5rem; font-size:14px; color:#1e40af; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <div>
+                    <strong>🔐 Role Permissions:</strong> &nbsp;
+                    <span style="background:#dbeafe;padding:3px 10px;border-radius:10px;font-weight:700;margin-right:8px;">ADMIN</span> Full access to everything &nbsp;|&nbsp;
+                    <span style="background:#f3f4f6;padding:3px 10px;border-radius:10px;font-weight:700;margin-right:8px;">USER</span> Can only create sales &amp; view products/customers
+                </div>
+                <button class="btn btn-primary" onclick="document.getElementById('addModal').classList.add('open')">
+                    ➕ Add New User
+                </button>
             </div>
 
             <!-- Users grid -->

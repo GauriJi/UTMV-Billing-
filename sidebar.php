@@ -1,6 +1,6 @@
 <nav class="sidebar">
     <div class="sidebar-header">
-        <h1 class="logo">₹ MBSBill</h1>
+        <h1 class="logo">₹ UTMV Billing</h1>
         <p class="tagline">GST Billing System</p>
     </div>
 
@@ -22,6 +22,12 @@
         <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'sales.php' ? 'active' : ''; ?>">
             <a href="sales.php"><span class="nav-icon">💰</span><span class="nav-text">Sales Invoice</span></a>
         </li>
+
+        <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'invoices.php' ? 'active' : ''; ?>">
+            <a href="invoices.php"><span class="nav-icon">🧾</span><span class="nav-text">All Invoices</span></a>
+        </li>
+        
+        
 
         <?php if (isAdmin()): ?>
         <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'purchase.php' ? 'active' : ''; ?>">

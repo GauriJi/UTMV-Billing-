@@ -64,11 +64,13 @@ $is_igst = $sale['igst_amount'] > 0;
         }
         
         .invoice-header .tax-invoice {
-            font-size: 20px;
-            font-weight: 600;
-            color: #333;
-            margin-top: 10px;
-        }
+    font-size: 40px;
+    font-weight: 900;
+    color: #000;
+    text-align: center;
+    letter-spacing: 3px;
+    margin-top: 10px;
+}
         
         .company-details {
             background: #f8fafc;
@@ -259,47 +261,78 @@ $is_igst = $sale['igst_amount'] > 0;
     
     <div class="invoice-container">
         <div class="invoice-header">
-            <!--h1><?php echo htmlspecialchars($company['company_name']); ?></h1-->
-            <h1><div class="tax-invoice">TAX INVOICE</div></h1>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div>
+            <img src="UTMV-LOGO.png" alt="Company Logo" style="height:70px;">
         </div>
-        
-        <div class="company-details">
-            <h2>Seller Details</h2>
-            <p><strong>Company Name:</strong> <?php echo htmlspecialchars($company['company_name']); ?></p>
-            <p><strong>Address:</strong> <?php echo htmlspecialchars($company['address']); ?></p>
-            <p><strong>City:</strong> <?php echo htmlspecialchars($company['city']); ?>, <strong>State:</strong> <?php echo htmlspecialchars($company['state']); ?> - <?php echo htmlspecialchars($company['pincode']); ?></p>
-            <p><strong>Phone:</strong> <?php echo htmlspecialchars($company['phone']); ?> | <strong>Email:</strong> <?php echo htmlspecialchars($company['email']); ?></p>
-            <p><strong>GSTIN:</strong> <?php echo htmlspecialchars($company['gstin']); ?></p>
+        <div style="text-align:center; flex:1;">
+            
+            <div class="tax-invoice">TAX INVOICE</div>
         </div>
+    </div>
+</div>
         
         <div class="info-grid">
-            <div class="info-box">
-                <h3>Invoice Details</h3>
-                <p><strong>Invoice No:</strong> <?php echo htmlspecialchars($sale['invoice_no']); ?></p>
-                <p><strong>Invoice Date:</strong> <?php echo date('d-M-Y', strtotime($sale['sale_date'])); ?></p>
-                <p><strong>Payment Status:</strong> <span style="color: <?php echo $sale['payment_status'] == 'paid' ? 'green' : 'orange'; ?>; font-weight: bold;"><?php echo strtoupper($sale['payment_status']); ?></span></p>
-            </div>
-            
-            <div class="info-box">
-                <h3>Bill To</h3>
-                <p><strong><?php echo htmlspecialchars($sale['customer_name'] ?? 'Walk-in Customer'); ?></strong></p>
-                <?php if ($sale['c_address']): ?>
-                <p><?php echo htmlspecialchars($sale['c_address']); ?></p>
-                <p><?php echo htmlspecialchars($sale['c_city']); ?>, <?php echo htmlspecialchars($sale['c_state']); ?> - <?php echo htmlspecialchars($sale['c_pincode']); ?></p>
-                <?php endif; ?>
-                <?php if ($sale['c_phone']): ?>
-                <p><strong>Phone:</strong> <?php echo htmlspecialchars($sale['c_phone']); ?></p>
-                <?php endif; ?>
-                <?php if ($sale['c_gstin']): ?>
-                <p><strong>GSTIN:</strong> <?php echo htmlspecialchars($sale['c_gstin']); ?></p>
-                <?php endif; ?>
-            </div>
-        </div>
+
+    <!-- Seller Details -->
+    <div class="info-box">
+        <h3>Seller Details</h3>
+        <p><strong><?php echo htmlspecialchars($company['company_name']); ?></strong></p>
+        <p><strong>Address:</strong> <?php echo htmlspecialchars($company['address']); ?></p>
+        <p>
+            <strong>City:</strong> <?php echo htmlspecialchars($company['city']); ?>, 
+            <strong>State:</strong> <?php echo htmlspecialchars($company['state']); ?> - 
+            <?php echo htmlspecialchars($company['pincode']); ?>
+        </p>
+        <p>
+            <strong>Phone:</strong> <?php echo htmlspecialchars($company['phone']); ?> | 
+            <strong>Email:</strong> <?php echo htmlspecialchars($company['email']); ?>
+        </p>
+        <p><strong>GSTIN:</strong> <?php echo htmlspecialchars($company['gstin']); ?></p>
+    </div>
+
+    <!-- Invoice Details -->
+    <div class="info-box">
+        <h3>Invoice Details</h3>
+        <p><strong>Invoice No:</strong> <?php echo htmlspecialchars($sale['invoice_no']); ?></p>
+        <p><strong>Invoice Date:</strong> <?php echo date('d-M-Y', strtotime($sale['sale_date'])); ?></p>
+        <p>
+            <strong>Payment Status:</strong> 
+            <span style="color: <?php echo $sale['payment_status'] == 'paid' ? 'green' : 'orange'; ?>; font-weight: bold;">
+                <?php echo strtoupper($sale['payment_status']); ?>
+            </span>
+        </p>
+    </div>
+
+    <!-- Bill To -->
+    <div class="info-box">
+        <h3>Bill To</h3>
+        <p><strong><?php echo htmlspecialchars($sale['customer_name'] ?? 'Walk-in Customer'); ?></strong></p>
+
+        <?php if ($sale['c_address']): ?>
+        <p><?php echo htmlspecialchars($sale['c_address']); ?></p>
+        <p>
+            <?php echo htmlspecialchars($sale['c_city']); ?>, 
+            <?php echo htmlspecialchars($sale['c_state']); ?> - 
+            <?php echo htmlspecialchars($sale['c_pincode']); ?>
+        </p>
+        <?php endif; ?>
+
+        <?php if ($sale['c_phone']): ?>
+        <p><strong>Phone:</strong> <?php echo htmlspecialchars($sale['c_phone']); ?></p>
+        <?php endif; ?>
+
+        <?php if ($sale['c_gstin']): ?>
+        <p><strong>GSTIN:</strong> <?php echo htmlspecialchars($sale['c_gstin']); ?></p>
+        <?php endif; ?>
+    </div>
+
+</div>
         
         <table class="items-table">
             <thead>
                 <tr>
-                    <th style="width: 5%">#</th>
+                    <th style="width: 5%">S.No</th>
                     <th style="width: 35%">Product/Service</th>
                     <th style="width: 12%">HSN/SAC</th>
                     <th style="width: 8%" class="text-center">Qty</th>
