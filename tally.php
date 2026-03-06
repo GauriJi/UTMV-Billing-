@@ -21,7 +21,8 @@ if (isset($_GET['export'])) {
     // ── SALES vouchers ──
     if ($type === 'sales' || $type === 'both') {
         $sales = $db->fetchAll("
-            SELECT s.*, c.customer_name, c.gstin as c_gstin, c.address as c_address, c.state as c_state
+            SELECT s.*, COALESCE(c.customer_name, s.customer_name_manual, 'Walk-in Customer') AS customer_name,
+                   c.gstin as c_gstin, c.address as c_address, c.state as c_state
             FROM sales s
             LEFT JOIN customers c ON s.customer_id = c.id
             WHERE s.sale_date BETWEEN ? AND ?
@@ -30,7 +31,7 @@ if (isset($_GET['export'])) {
 
         foreach ($sales as $sale) {
             $items = $db->fetchAll("SELECT * FROM sales_items WHERE sale_id = ?", [$sale['id']]);
-            $customer = htmlspecialchars($sale['customer_name'] ?? 'Walk-in Customer');
+            $customer = htmlspecialchars($sale['customer_name']);
             $date     = date('Ymd', strtotime($sale['sale_date']));
             echo '  <TALLYMESSAGE xmlns:UDF="TallyUDF">' . "\n";
             echo '    <VOUCHER VCHTYPE="Sales" ACTION="Create">' . "\n";
@@ -69,7 +70,8 @@ if (isset($_GET['export'])) {
     // ── PURCHASE vouchers ──
     if ($type === 'purchases' || $type === 'both') {
         $purchases = $db->fetchAll("
-            SELECT p.*, s.supplier_name, s.gstin as s_gstin, s.state as s_state
+            SELECT p.*, COALESCE(s.supplier_name, p.supplier_name_manual, 'Unknown Supplier') AS supplier_name,
+                   s.gstin as s_gstin, s.state as s_state
             FROM purchases p
             LEFT JOIN suppliers s ON p.supplier_id = s.id
             WHERE p.purchase_date BETWEEN ? AND ?
@@ -78,7 +80,7 @@ if (isset($_GET['export'])) {
 
         foreach ($purchases as $purchase) {
             $items    = $db->fetchAll("SELECT * FROM purchase_items WHERE purchase_id = ?", [$purchase['id']]);
-            $supplier = htmlspecialchars($purchase['supplier_name'] ?? 'Unknown Supplier');
+            $supplier = htmlspecialchars($purchase['supplier_name']);
             $date     = date('Ymd', strtotime($purchase['purchase_date']));
             echo '  <TALLYMESSAGE xmlns:UDF="TallyUDF">' . "\n";
             echo '    <VOUCHER VCHTYPE="Purchase" ACTION="Create">' . "\n";
@@ -126,8 +128,8 @@ $company    = $db->single("SELECT * FROM company_settings LIMIT 1");
 
 $sales_count     = $db->single("SELECT COUNT(*) as c, SUM(grand_total) as t FROM sales WHERE sale_date BETWEEN ? AND ?", [$start_date, $end_date]);
 $purchase_count  = $db->single("SELECT COUNT(*) as c, SUM(grand_total) as t FROM purchases WHERE purchase_date BETWEEN ? AND ?", [$start_date, $end_date]);
-$recent_sales    = $db->fetchAll("SELECT s.invoice_no, s.sale_date, s.grand_total, c.customer_name FROM sales s LEFT JOIN customers c ON s.customer_id = c.id WHERE s.sale_date BETWEEN ? AND ? ORDER BY s.sale_date DESC LIMIT 8", [$start_date, $end_date]);
-$recent_purchases= $db->fetchAll("SELECT p.purchase_no, p.purchase_date, p.grand_total, s.supplier_name FROM purchases p LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE p.purchase_date BETWEEN ? AND ? ORDER BY p.purchase_date DESC LIMIT 8", [$start_date, $end_date]);
+$recent_sales    = $db->fetchAll("SELECT s.invoice_no, s.sale_date, s.grand_total, COALESCE(c.customer_name, s.customer_name_manual, 'Walk-in') AS customer_name FROM sales s LEFT JOIN customers c ON s.customer_id = c.id WHERE s.sale_date BETWEEN ? AND ? ORDER BY s.sale_date DESC LIMIT 8", [$start_date, $end_date]);
+$recent_purchases= $db->fetchAll("SELECT p.purchase_no, p.purchase_date, p.grand_total, COALESCE(s.supplier_name, p.supplier_name_manual, 'Unknown') AS supplier_name FROM purchases p LEFT JOIN suppliers s ON p.supplier_id = s.id WHERE p.purchase_date BETWEEN ? AND ? ORDER BY p.purchase_date DESC LIMIT 8", [$start_date, $end_date]);
 ?>
 <!DOCTYPE html>
 <html lang="en">

@@ -9,8 +9,8 @@ $total_purchases = $db->single("SELECT SUM(grand_total) as total FROM purchases"
 $total_customers = $db->single("SELECT COUNT(*) as count FROM customers")['count'] ?? 0;
 $total_products  = $db->single("SELECT COUNT(*) as count FROM products")['count'] ?? 0;
 
-// Recent sales
-$recent_sales = $db->fetchAll("SELECT s.*, c.customer_name FROM sales s LEFT JOIN customers c ON s.customer_id = c.id ORDER BY s.created_at DESC LIMIT 5");
+// Recent sales — show saved customer name, or manual name, or 'Walk-in'
+$recent_sales = $db->fetchAll("SELECT s.*, COALESCE(c.customer_name, s.customer_name_manual, 'Walk-in') AS customer_name FROM sales s LEFT JOIN customers c ON s.customer_id = c.id ORDER BY s.created_at DESC LIMIT 5");
 
 // Today's reminders (if table exists)
 $todays_reminders = [];
@@ -167,7 +167,7 @@ try {
                                     ?>
                                     <tr>
                                         <td><strong><?php echo htmlspecialchars($sale['invoice_no']); ?></strong></td>
-                                        <td><?php echo htmlspecialchars($sale['customer_name'] ?? 'Walk-in'); ?></td>
+                                        <td><?php echo htmlspecialchars($sale['customer_name']); ?></td>
                                         <td><?php echo date('d M Y', strtotime($sale['sale_date'])); ?></td>
                                         <td>₹<?php echo number_format($sale['total_amount'], 2); ?></td>
                                         <td>₹<?php echo number_format($gst, 2); ?></td>

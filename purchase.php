@@ -187,6 +187,19 @@ $recent_purchases = $db->fetchAll("
                     </div>
                 </div>
 
+                <!-- GST Type selector — only shown for manual suppliers -->
+                <div id="gst_type_row" style="display:none;align-items:center;gap:12px;
+                     background:#fef9c3;border:1px solid #fbbf24;border-radius:8px;
+                     padding:12px 16px;margin-bottom:20px;">
+                    <span style="font-size:18px;">⚠️</span>
+                    <span style="font-weight:600;color:#92400e;">Manual supplier — choose GST type:</span>
+                    <select id="gst_type_selector" class="form-control" style="width:auto;"
+                            onchange="items.forEach(i=>calculateRow(i.id))">
+                        <option value="cgst_sgst">CGST + SGST (Uttarakhand — Intra-state)</option>
+                        <option value="igst">IGST (Outside Uttarakhand — Inter-state)</option>
+                    </select>
+                </div>
+
                 <!-- Items Section -->
                 <div class="items-section">
                     <div class="section-header">
@@ -292,7 +305,7 @@ $recent_purchases = $db->fetchAll("
 
 <script>
 const products     = <?php echo json_encode($products); ?>;
-const companyState = "<?php echo addslashes($company['state'] ?? 'Maharashtra'); ?>";
+const companyState = 'Uttarakhand'; // Your company is in Uttarakhand
 let itemCounter = 0;
 let items = [];
 
@@ -301,7 +314,8 @@ const supplierList = <?php echo json_encode(array_map(function($s){
     return ['id'=>$s['id'],'name'=>$s['supplier_name'],'gstin'=>$s['gstin'],'state'=>$s['state']];
 }, $suppliers)); ?>;
 
-let selectedSupplierState = '';
+// null = manual (unknown state), string = known state
+let selectedSupplierState = null;
 
 function searchSupplier(val) {
     const drop    = document.getElementById('supp_drop');
@@ -309,10 +323,11 @@ function searchSupplier(val) {
     const hidName = document.getElementById('supplier_name_manual');
     const badge   = document.getElementById('supp_badge');
 
-    hidId.value            = '';
-    hidName.value          = val.trim();
-    selectedSupplierState  = '';
-    badge.style.display    = 'none';
+    hidId.value           = '';
+    hidName.value         = val.trim();
+    selectedSupplierState = null;
+    badge.style.display   = 'none';
+    showGstSelector();
 
     if (!val.trim()) { drop.style.display = 'none'; return; }
 
@@ -322,18 +337,18 @@ function searchSupplier(val) {
 
     drop.innerHTML = '';
 
-    // "Use as manual" always first
     const manualDiv = document.createElement('div');
     manualDiv.className = 'supp-item supp-manual';
     manualDiv.innerHTML = `✏️ Use <b>"${val}"</b> as manual supplier name`;
     manualDiv.onmousedown = () => {
-        hidId.value            = '';
-        hidName.value          = val.trim();
-        selectedSupplierState  = '';
+        hidId.value           = '';
+        hidName.value         = val.trim();
+        selectedSupplierState = null;
         document.getElementById('supplier_search').value = val.trim();
         badge.textContent   = '✏️ Manual: ' + val.trim();
         badge.style.display = 'block';
         drop.style.display  = 'none';
+        showGstSelector();
         items.forEach(i => calculateRow(i.id));
     };
     drop.appendChild(manualDiv);
@@ -341,15 +356,17 @@ function searchSupplier(val) {
     matches.forEach(s => {
         const d = document.createElement('div');
         d.className = 'supp-item';
-        d.innerHTML = `🏭 <strong>${s.name}</strong>${s.gstin ? ' <span style="color:#94a3b8;font-size:11px;"> | ' + s.gstin + '</span>' : ''}`;
+        const stateLabel = s.state ? ` — ${s.state}` : '';
+        d.innerHTML = `🏭 <strong>${s.name}</strong><span style="color:#94a3b8;font-size:11px;">${stateLabel}${s.gstin ? ' | '+s.gstin : ''}</span>`;
         d.onmousedown = () => {
             hidId.value           = s.id;
             hidName.value         = '';
             selectedSupplierState = s.state || '';
             document.getElementById('supplier_search').value = s.name;
-            badge.textContent   = '✅ ' + s.name;
+            badge.textContent   = '✅ ' + s.name + (s.state ? ' (' + s.state + ')' : '');
             badge.style.display = 'block';
             drop.style.display  = 'none';
+            hideGstSelector();
             items.forEach(i => calculateRow(i.id));
         };
         drop.appendChild(d);
@@ -514,7 +531,14 @@ function calculateRow(itemId) {
     item.gst_rate     = parseFloat(document.getElementById('gst_'  + itemId).value) || 0;
     item.amount       = item.quantity * item.rate;
 
-    const isInterState = selectedSupplierState && selectedSupplierState !== companyState;
+    let isInterState;
+    if (selectedSupplierState === null) {
+        // Manual supplier — read from user's GST type selector
+        isInterState = document.getElementById('gst_type_selector').value === 'igst';
+    } else {
+        // Known supplier state — auto detect
+        isInterState = selectedSupplierState.trim().toLowerCase() !== 'uttarakhand';
+    }
 
     if (isInterState) {
         item.igst = (item.amount * item.gst_rate) / 100;
@@ -531,6 +555,13 @@ function calculateRow(itemId) {
     document.getElementById('total_'  + itemId).textContent = '₹' + item.total.toFixed(2);
 
     calculateTotals();
+}
+
+function showGstSelector() {
+    document.getElementById('gst_type_row').style.display = 'flex';
+}
+function hideGstSelector() {
+    document.getElementById('gst_type_row').style.display = 'none';
 }
 
 function removeItem(itemId) {

@@ -1,37 +1,38 @@
 <?php
 require_once 'auth.php';
 require_once 'database.php';
+requireAdmin();
 $db = new Database();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     try {
         if ($_POST['action'] === 'add') {
-            $sql = "INSERT INTO customers (customer_name,contact_person,phone,email,address,city,state,pincode,gstin) VALUES (?,?,?,?,?,?,?,?,?)";
-            $db->query($sql, [$_POST['customer_name'],$_POST['contact_person'],$_POST['phone'],$_POST['email'],$_POST['address'],$_POST['city'],$_POST['state'],$_POST['pincode'],$_POST['gstin']]);
-            $_SESSION['success'] = "Customer added successfully!";
+            $sql = "INSERT INTO suppliers (supplier_name,contact_person,phone,email,address,city,state,pincode,gstin) VALUES (?,?,?,?,?,?,?,?,?)";
+            $db->query($sql, [$_POST['supplier_name'],$_POST['contact_person'],$_POST['phone'],$_POST['email'],$_POST['address'],$_POST['city'],$_POST['state'],$_POST['pincode'],$_POST['gstin']]);
+            $_SESSION['success'] = "Supplier added successfully!";
         } elseif ($_POST['action'] === 'delete') {
-            $db->query("DELETE FROM customers WHERE id=?", [$_POST['id']]);
-            $_SESSION['success'] = "Customer deleted successfully!";
+            $db->query("DELETE FROM suppliers WHERE id=?", [$_POST['id']]);
+            $_SESSION['success'] = "Supplier deleted successfully!";
         }
-        header("Location: customers.php"); exit;
+        header("Location: suppliers.php"); exit;
     } catch (Exception $e) { $error = "Error: " . $e->getMessage(); }
 }
 
-$customers = $db->fetchAll("SELECT * FROM customers ORDER BY customer_name");
+$suppliers = $db->fetchAll("SELECT * FROM suppliers ORDER BY supplier_name");
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Customers - <?php echo APP_NAME; ?></title>
+    <title>Suppliers - <?php echo APP_NAME; ?></title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="app-container">
     <?php include 'sidebar.php'; ?>
     <main class="main-content">
-        <?php $page_title = 'Customer Management'; include 'topbar.php'; ?>
+        <?php $page_title = 'Supplier Management'; include 'topbar.php'; ?>
         <div class="content-wrapper">
             <?php if(isset($_SESSION['success'])): ?>
                 <div class="alert alert-success"><?php echo $_SESSION['success']; unset($_SESSION['success']); ?></div>
@@ -40,35 +41,31 @@ $customers = $db->fetchAll("SELECT * FROM customers ORDER BY customer_name");
 
             <div class="table-section">
                 <div class="section-header">
-                    <h3 class="section-title">All Customers</h3>
-                    <button class="btn btn-primary" onclick="document.getElementById('addModal').style.display='flex'">+ Add Customer</button>
+                    <h3 class="section-title">All Suppliers</h3>
+                    <button class="btn btn-primary" onclick="document.getElementById('addModal').style.display='flex'">+ Add Supplier</button>
                 </div>
                 <div class="table-container">
                     <table class="data-table">
-                        <thead><tr><th>Customer Name</th><th>Contact Person</th><th>Phone</th><th>Email</th><th>City, State</th><th>GSTIN</th><th>Actions</th></tr></thead>
+                        <thead><tr><th>Supplier Name</th><th>Contact Person</th><th>Phone</th><th>Email</th><th>City, State</th><th>GSTIN</th><th>Actions</th></tr></thead>
                         <tbody>
-                            <?php foreach($customers as $c): ?>
+                            <?php foreach($suppliers as $s): ?>
                             <tr>
-                                <td><strong><?php echo htmlspecialchars($c['customer_name']); ?></strong></td>
-                                <td><?php echo htmlspecialchars($c['contact_person']); ?></td>
-                                <td><?php echo htmlspecialchars($c['phone']); ?></td>
-                                <td><?php echo htmlspecialchars($c['email']); ?></td>
-                                <td><?php echo htmlspecialchars($c['city'].', '.$c['state']); ?></td>
-                                <td><code><?php echo htmlspecialchars($c['gstin']); ?></code></td>
+                                <td><strong><?php echo htmlspecialchars($s['supplier_name']); ?></strong></td>
+                                <td><?php echo htmlspecialchars($s['contact_person']); ?></td>
+                                <td><?php echo htmlspecialchars($s['phone']); ?></td>
+                                <td><?php echo htmlspecialchars($s['email']); ?></td>
+                                <td><?php echo htmlspecialchars($s['city'].', '.$s['state']); ?></td>
+                                <td><code><?php echo htmlspecialchars($s['gstin']); ?></code></td>
                                 <td>
-                                    <?php if(isAdmin()): ?>
                                     <form method="POST" style="display:inline">
                                         <input type="hidden" name="action" value="delete">
-                                        <input type="hidden" name="id" value="<?php echo $c['id']; ?>">
-                                        <button type="submit" class="btn-icon" onclick="return confirm('Delete this customer?')" title="Delete">🗑️</button>
+                                        <input type="hidden" name="id" value="<?php echo $s['id']; ?>">
+                                        <button type="submit" class="btn-icon" onclick="return confirm('Delete this supplier?')" title="Delete">🗑️</button>
                                     </form>
-                                    <?php endif; ?>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
-                            <?php if(empty($customers)): ?>
-                            <tr><td colspan="7" class="no-data">No customers found.</td></tr>
-                            <?php endif; ?>
+                            <?php if(empty($suppliers)): ?><tr><td colspan="7" class="no-data">No suppliers found.</td></tr><?php endif; ?>
                         </tbody>
                     </table>
                 </div>
@@ -80,11 +77,11 @@ $customers = $db->fetchAll("SELECT * FROM customers ORDER BY customer_name");
 <!-- Add Modal -->
 <div id="addModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
     <div style="background:white;border-radius:16px;padding:28px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;">
-        <h3 style="margin-bottom:20px;font-size:18px;">➕ Add New Customer</h3>
+        <h3 style="margin-bottom:20px;font-size:18px;">➕ Add New Supplier</h3>
         <form method="POST">
             <input type="hidden" name="action" value="add">
             <div class="form-grid">
-                <div class="form-group"><label>Customer Name *</label><input type="text" name="customer_name" class="form-control" required></div>
+                <div class="form-group"><label>Supplier Name *</label><input type="text" name="supplier_name" class="form-control" required></div>
                 <div class="form-group"><label>Contact Person</label><input type="text" name="contact_person" class="form-control"></div>
                 <div class="form-group"><label>Phone</label><input type="text" name="phone" class="form-control"></div>
                 <div class="form-group"><label>Email</label><input type="email" name="email" class="form-control"></div>
@@ -96,7 +93,7 @@ $customers = $db->fetchAll("SELECT * FROM customers ORDER BY customer_name");
             </div>
             <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
                 <button type="button" class="btn btn-secondary" onclick="document.getElementById('addModal').style.display='none'">Cancel</button>
-                <button type="submit" class="btn btn-primary">✅ Add Customer</button>
+                <button type="submit" class="btn btn-primary">✅ Add Supplier</button>
             </div>
         </form>
     </div>

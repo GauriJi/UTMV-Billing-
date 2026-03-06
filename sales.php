@@ -203,6 +203,19 @@ $company   = $db->single("SELECT * FROM company_settings LIMIT 1");
                     </div>
                 </div>
 
+                <!-- GST Type selector — only shown for manual customers -->
+                <div id="gst_type_row" style="display:none;align-items:center;gap:12px;
+                     background:#fef9c3;border:1px solid #fbbf24;border-radius:8px;
+                     padding:12px 16px;margin-bottom:20px;">
+                    <span style="font-size:18px;">⚠️</span>
+                    <span style="font-weight:600;color:#92400e;">Manual customer — choose GST type:</span>
+                    <select id="gst_type_selector" class="form-control" style="width:auto;"
+                            onchange="items.forEach(i=>calculateRow(i.id))">
+                        <option value="cgst_sgst">CGST + SGST (Uttarakhand — Intra-state)</option>
+                        <option value="igst">IGST (Outside Uttarakhand — Inter-state)</option>
+                    </select>
+                </div>
+
                 <!-- Items Section -->
                 <div class="items-section">
                     <div class="section-header">
@@ -273,7 +286,7 @@ $company   = $db->single("SELECT * FROM company_settings LIMIT 1");
 
 <script>
 const products     = <?php echo json_encode($products); ?>;
-const companyState = "<?php echo addslashes($company['state'] ?? 'Maharashtra'); ?>";
+const companyState = 'Uttarakhand'; // Your company is in Uttarakhand
 let itemCounter = 0;
 let items = [];
 
@@ -283,7 +296,8 @@ const customerList = <?php echo json_encode(array_map(function($c){
 }, $customers)); ?>;
 
 // Track selected customer state for GST calc
-let selectedCustomerState = '';
+// null = manual (unknown state), string = known state
+let selectedCustomerState = null;
 
 function searchCustomer(val) {
     const drop    = document.getElementById('cust_drop');
@@ -291,11 +305,11 @@ function searchCustomer(val) {
     const hidName = document.getElementById('customer_name_manual');
     const badge   = document.getElementById('cust_badge');
 
-    // Reset selection — whatever is typed becomes the manual name fallback
-    hidId.value   = '';
-    hidName.value = val.trim();
-    selectedCustomerState = '';
+    hidId.value           = '';
+    hidName.value         = val.trim();
+    selectedCustomerState = null; // null = manual, unknown state
     badge.style.display   = 'none';
+    showGstSelector(); // show manual GST picker when typing
 
     if (!val.trim()) { drop.style.display = 'none'; return; }
 
@@ -305,18 +319,19 @@ function searchCustomer(val) {
 
     drop.innerHTML = '';
 
-    // "Use as manual" option always first
+    // "Use as manual" always first
     const manualDiv = document.createElement('div');
     manualDiv.className = 'cust-item cust-manual';
     manualDiv.innerHTML = `✏️ Use <b>"${val}"</b> as manual customer name`;
     manualDiv.onmousedown = () => {
-        hidId.value   = '';
-        hidName.value = val.trim();
-        selectedCustomerState = '';
+        hidId.value           = '';
+        hidName.value         = val.trim();
+        selectedCustomerState = null;
         document.getElementById('customer_search').value = val.trim();
-        badge.textContent    = '✏️ Manual: ' + val.trim();
-        badge.style.display  = 'block';
-        drop.style.display   = 'none';
+        badge.textContent   = '✏️ Manual: ' + val.trim();
+        badge.style.display = 'block';
+        drop.style.display  = 'none';
+        showGstSelector();
         items.forEach(i => calculateRow(i.id));
     };
     drop.appendChild(manualDiv);
@@ -324,15 +339,17 @@ function searchCustomer(val) {
     matches.forEach(c => {
         const d = document.createElement('div');
         d.className = 'cust-item';
-        d.innerHTML = `👤 <strong>${c.name}</strong>${c.gstin ? ' <span style="color:#94a3b8;font-size:11px;"> | ' + c.gstin + '</span>' : ''}`;
+        const stateLabel = c.state ? ` — ${c.state}` : '';
+        d.innerHTML = `👤 <strong>${c.name}</strong><span style="color:#94a3b8;font-size:11px;">${stateLabel}${c.gstin ? ' | '+c.gstin : ''}</span>`;
         d.onmousedown = () => {
-            hidId.value            = c.id;
-            hidName.value          = '';
-            selectedCustomerState  = c.state || '';
+            hidId.value           = c.id;
+            hidName.value         = '';
+            selectedCustomerState = c.state || '';
             document.getElementById('customer_search').value = c.name;
-            badge.textContent    = '✅ ' + c.name;
-            badge.style.display  = 'block';
-            drop.style.display   = 'none';
+            badge.textContent   = '✅ ' + c.name + (c.state ? ' (' + c.state + ')' : '');
+            badge.style.display = 'block';
+            drop.style.display  = 'none';
+            hideGstSelector();
             items.forEach(i => calculateRow(i.id));
         };
         drop.appendChild(d);
@@ -497,8 +514,14 @@ function calculateRow(itemId) {
     item.gst_rate     = parseFloat(document.getElementById('gst_'  + itemId).value) || 0;
     item.amount       = item.quantity * item.rate;
 
-    // Use selectedCustomerState (from search) for GST type
-    const isInterState = selectedCustomerState && selectedCustomerState !== companyState;
+    let isInterState;
+    if (selectedCustomerState === null) {
+        // Manual customer — read from user's GST type selector
+        isInterState = document.getElementById('gst_type_selector').value === 'igst';
+    } else {
+        // Known customer state — auto detect
+        isInterState = selectedCustomerState.trim().toLowerCase() !== 'uttarakhand';
+    }
 
     if (isInterState) {
         item.igst = (item.amount * item.gst_rate) / 100;
@@ -515,6 +538,13 @@ function calculateRow(itemId) {
     document.getElementById('total_'  + itemId).textContent = '₹' + item.total.toFixed(2);
 
     calculateTotals();
+}
+
+function showGstSelector() {
+    document.getElementById('gst_type_row').style.display = 'flex';
+}
+function hideGstSelector() {
+    document.getElementById('gst_type_row').style.display = 'none';
 }
 
 function removeItem(itemId) {
