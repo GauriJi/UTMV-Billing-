@@ -3,29 +3,55 @@ require_once 'auth.php';
 require_once 'database.php';
 $db = new Database();
 
+// Handle delete purchase
+if (isset($_GET['delete_purchase'])) {
+    $del_id = (int)$_GET['delete_purchase'];
+    try {
+        $db->beginTransaction();
+        // Restore stock for linked products
+        $del_items = $db->fetchAll("SELECT product_id, quantity FROM purchase_items WHERE purchase_id = ?", [$del_id]);
+        foreach ($del_items as $di) {
+            if ($di['product_id']) {
+                $db->query("UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?", [$di['quantity'], $di['product_id']]);
+            }
+        }
+        $db->query("DELETE FROM purchase_items WHERE purchase_id = ?", [$del_id]);
+        $db->query("DELETE FROM purchases WHERE id = ?", [$del_id]);
+        $db->commit();
+        $_SESSION['success'] = "Purchase deleted successfully.";
+    }
+    catch (Exception $e) {
+        $db->rollback();
+        $_SESSION['error'] = "Error deleting purchase: " . $e->getMessage();
+    }
+    header("Location: purchase.php");
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_purchase') {
     try {
         $db->beginTransaction();
-        
+
         $settings = $db->single("SELECT * FROM company_settings LIMIT 1");
         $prefix = $settings['purchase_prefix'] ?? 'PUR';
-        
+
         $last_purchase = $db->single("SELECT purchase_no FROM purchases ORDER BY id DESC LIMIT 1");
         if ($last_purchase) {
             $last_num = intval(substr($last_purchase['purchase_no'], strlen($prefix)));
             $purchase_no = $prefix . str_pad($last_num + 1, 5, '0', STR_PAD_LEFT);
-        } else {
+        }
+        else {
             $purchase_no = $prefix . '00001';
         }
 
         // Resolve supplier — saved ID or manual typed name
-        $supp_id     = !empty($_POST['supplier_id']) ? (int)$_POST['supplier_id'] : null;
+        $supp_id = !empty($_POST['supplier_id']) ? (int)$_POST['supplier_id'] : null;
         $supp_manual = (!$supp_id && !empty($_POST['supplier_name_manual']))
-                       ? trim($_POST['supplier_name_manual']) : null;
-        
+            ? trim($_POST['supplier_name_manual']) : null;
+
         $purchase_sql = "INSERT INTO purchases (purchase_no, supplier_id, supplier_name_manual, purchase_date, total_amount, cgst_amount, sgst_amount, igst_amount, grand_total, notes) 
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        
+
         $db->query($purchase_sql, [
             $purchase_no,
             $supp_id,
@@ -38,9 +64,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $_POST['grand_total'],
             $_POST['notes']
         ]);
-        
+
         $purchase_id = $db->lastInsertId();
-        
+
         $items = json_decode($_POST['items'], true);
         foreach ($items as $item) {
             $item_sql = "INSERT INTO purchase_items (purchase_id, product_id, product_name, hsn_code, quantity, rate, amount, gst_rate, cgst, sgst, igst, total)
@@ -60,25 +86,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $item['total']
             ]);
             if ($item['product_id']) {
-                $db->query("UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?", 
-                          [$item['quantity'], $item['product_id']]);
+                $db->query("UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?",
+                [$item['quantity'], $item['product_id']]);
             }
         }
-        
+
         $db->commit();
         $_SESSION['success'] = "Purchase entry saved successfully! Purchase No: " . $purchase_no;
         header("Location: purchase.php");
         exit;
-        
-    } catch (Exception $e) {
+
+    }
+    catch (Exception $e) {
         $db->rollback();
         $error = "Error saving purchase: " . $e->getMessage();
     }
 }
 
-$suppliers        = $db->fetchAll("SELECT * FROM suppliers ORDER BY supplier_name");
-$products         = $db->fetchAll("SELECT * FROM products ORDER BY product_name");
-$company          = $db->single("SELECT * FROM company_settings LIMIT 1");
+$suppliers = $db->fetchAll("SELECT * FROM suppliers ORDER BY supplier_name");
+$products = $db->fetchAll("SELECT * FROM products ORDER BY product_name");
+$company = $db->single("SELECT * FROM company_settings LIMIT 1");
 $recent_purchases = $db->fetchAll("
     SELECT p.*, 
            COALESCE(s.supplier_name, p.supplier_name_manual, 'N/A') AS display_supplier
@@ -149,15 +176,24 @@ $recent_purchases = $db->fetchAll("
     <?php include 'sidebar.php'; ?>
 
     <main class="main-content">
-        <?php $page_title = 'Purchase Entry'; include 'topbar.php'; ?>
+        <?php $page_title = 'Purchase Entry';
+include 'topbar.php'; ?>
 
         <div class="content-wrapper">
-            <?php if(isset($_SESSION['success'])): ?>
-                <div class="alert alert-success"><?php echo $_SESSION['success']; unset($_SESSION['success']); ?></div>
-            <?php endif; ?>
-            <?php if(isset($error)): ?>
+            <?php if (isset($_SESSION['success'])): ?>
+                <div class="alert alert-success"><?php echo $_SESSION['success'];
+    unset($_SESSION['success']); ?></div>
+            <?php
+endif; ?>
+            <?php if (isset($_SESSION['error'])): ?>
+                <div class="alert alert-error"><?php echo $_SESSION['error'];
+    unset($_SESSION['error']); ?></div>
+            <?php
+endif; ?>
+            <?php if (isset($error)): ?>
                 <div class="alert alert-error"><?php echo $error; ?></div>
-            <?php endif; ?>
+            <?php
+endif; ?>
 
             <form id="purchaseForm" method="POST" class="invoice-form">
                 <input type="hidden" name="action" value="save_purchase">
@@ -278,13 +314,15 @@ $recent_purchases = $db->fetchAll("
                                 <th>Amount</th>
                                 <th>GST</th>
                                 <th>Grand Total</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php if(empty($recent_purchases)): ?>
-                            <tr><td colspan="6" class="no-data">No purchases found</td></tr>
-                            <?php else: ?>
-                                <?php foreach($recent_purchases as $p): ?>
+                            <?php if (empty($recent_purchases)): ?>
+                            <tr><td colspan="7" class="no-data">No purchases found</td></tr>
+                            <?php
+else: ?>
+                                <?php foreach ($recent_purchases as $p): ?>
                                 <tr>
                                     <td><strong><?php echo htmlspecialchars($p['purchase_no']); ?></strong></td>
                                     <td><?php echo htmlspecialchars($p['display_supplier']); ?></td>
@@ -292,9 +330,16 @@ $recent_purchases = $db->fetchAll("
                                     <td>₹<?php echo number_format($p['total_amount'], 2); ?></td>
                                     <td>₹<?php echo number_format($p['cgst_amount'] + $p['sgst_amount'] + $p['igst_amount'], 2); ?></td>
                                     <td><strong>₹<?php echo number_format($p['grand_total'], 2); ?></strong></td>
+                                    <td>
+                                        <a href="purchase.php?delete_purchase=<?php echo $p['id']; ?>"
+                                           class="btn-icon" title="Delete"
+                                           onclick="return confirm('Delete purchase <?php echo htmlspecialchars($p['purchase_no']); ?>? This will also reverse the stock changes.')">🗑️</a>
+                                    </td>
                                 </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
+                                <?php
+    endforeach; ?>
+                            <?php
+endif; ?>
                         </tbody>
                     </table>
                 </div>
@@ -310,8 +355,8 @@ let itemCounter = 0;
 let items = [];
 
 // ─── Supplier search with manual entry ───────────────────────────────────────
-const supplierList = <?php echo json_encode(array_map(function($s){
-    return ['id'=>$s['id'],'name'=>$s['supplier_name'],'gstin'=>$s['gstin'],'state'=>$s['state']];
+const supplierList = <?php echo json_encode(array_map(function ($s) {
+    return ['id' => $s['id'], 'name' => $s['supplier_name'], 'gstin' => $s['gstin'], 'state' => $s['state']];
 }, $suppliers)); ?>;
 
 // null = manual (unknown state), string = known state

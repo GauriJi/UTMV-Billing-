@@ -3,31 +3,56 @@ require_once 'auth.php';
 require_once 'database.php';
 $db = new Database();
 
+// Handle delete invoice/sale
+if (isset($_GET['delete_sale'])) {
+    $del_id = (int)$_GET['delete_sale'];
+    try {
+        $db->beginTransaction();
+        // Restore stock for linked products
+        $del_items = $db->fetchAll("SELECT product_id, quantity FROM sales_items WHERE sale_id = ?", [$del_id]);
+        foreach ($del_items as $di) {
+            if ($di['product_id']) {
+                $db->query("UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?", [$di['quantity'], $di['product_id']]);
+            }
+        }
+        $db->query("DELETE FROM sales_items WHERE sale_id = ?", [$del_id]);
+        $db->query("DELETE FROM sales WHERE id = ?", [$del_id]);
+        $db->commit();
+        $_SESSION['success'] = "Invoice deleted successfully.";
+    }
+    catch (Exception $e) {
+        $db->rollback();
+        $_SESSION['error'] = "Error deleting invoice: " . $e->getMessage();
+    }
+    header("Location: invoices.php");
+    exit;
+}
+
 // Filters
-$search     = trim($_GET['search']     ?? '');
-$status     = $_GET['status']          ?? '';
-$start_date = $_GET['start_date']      ?? '';
-$end_date   = $_GET['end_date']        ?? '';
+$search = trim($_GET['search'] ?? '');
+$status = $_GET['status'] ?? '';
+$start_date = $_GET['start_date'] ?? '';
+$end_date = $_GET['end_date'] ?? '';
 
 // Build query
-$where  = ["1=1"];
+$where = ["1=1"];
 $params = [];
 
 if ($search) {
-    $where[]  = "(s.invoice_no LIKE ? OR COALESCE(c.customer_name, s.customer_name_manual, '') LIKE ?)";
+    $where[] = "(s.invoice_no LIKE ? OR COALESCE(c.customer_name, s.customer_name_manual, '') LIKE ?)";
     $params[] = "%$search%";
     $params[] = "%$search%";
 }
 if ($status) {
-    $where[]  = "s.payment_status = ?";
+    $where[] = "s.payment_status = ?";
     $params[] = $status;
 }
 if ($start_date) {
-    $where[]  = "s.sale_date >= ?";
+    $where[] = "s.sale_date >= ?";
     $params[] = $start_date;
 }
 if ($end_date) {
-    $where[]  = "s.sale_date <= ?";
+    $where[] = "s.sale_date <= ?";
     $params[] = $end_date;
 }
 
@@ -96,6 +121,7 @@ $totals = $db->single("
         .btn-icon-sm:hover { transform: scale(1.15); }
         .btn-print { background:#eff6ff; }
         .btn-edit  { background:#fef3c7; }
+        .btn-delete { background:#fee2e2; }
 
         .no-data-msg {
             text-align: center; padding: 60px 20px; color: #94a3b8;
@@ -108,9 +134,21 @@ $totals = $db->single("
     <?php include 'sidebar.php'; ?>
 
     <main class="main-content">
-        <?php $page_title = '🧾 All Invoices'; include 'topbar.php'; ?>
+        <?php $page_title = '🧾 All Invoices';
+include 'topbar.php'; ?>
 
         <div class="content-wrapper">
+
+            <?php if (isset($_SESSION['success'])): ?>
+                <div class="alert alert-success"><?php echo $_SESSION['success'];
+    unset($_SESSION['success']); ?></div>
+            <?php
+endif; ?>
+            <?php if (isset($_SESSION['error'])): ?>
+                <div class="alert alert-error"><?php echo $_SESSION['error'];
+    unset($_SESSION['error']); ?></div>
+            <?php
+endif; ?>
 
             <!-- Filter Bar -->
             <form method="GET" class="filter-bar">
@@ -123,9 +161,9 @@ $totals = $db->single("
                     <label>Status</label>
                     <select name="status">
                         <option value="">All Status</option>
-                        <option value="paid"    <?php echo $status==='paid'    ?'selected':''; ?>>Paid</option>
-                        <option value="pending" <?php echo $status==='pending' ?'selected':''; ?>>Pending</option>
-                        <option value="partial" <?php echo $status==='partial' ?'selected':''; ?>>Partial</option>
+                        <option value="paid"    <?php echo $status === 'paid' ? 'selected' : ''; ?>>Paid</option>
+                        <option value="pending" <?php echo $status === 'pending' ? 'selected' : ''; ?>>Pending</option>
+                        <option value="partial" <?php echo $status === 'partial' ? 'selected' : ''; ?>>Partial</option>
                     </select>
                 </div>
                 <div class="fg">
@@ -183,7 +221,8 @@ $totals = $db->single("
                                     </div>
                                 </td>
                             </tr>
-                            <?php else: ?>
+                            <?php
+else: ?>
                                 <?php foreach ($invoices as $inv): ?>
                                 <tr>
                                     <td><strong><?php echo htmlspecialchars($inv['invoice_no']); ?></strong></td>
@@ -202,10 +241,15 @@ $totals = $db->single("
                                            class="btn-icon-sm btn-print" target="_blank" title="Print Invoice">🖨️</a>
                                         <a href="edit_sale.php?id=<?php echo $inv['id']; ?>"
                                            class="btn-icon-sm btn-edit" title="Edit Invoice">✏️</a>
+                                        <a href="invoices.php?delete_sale=<?php echo $inv['id']; ?>"
+                                           class="btn-icon-sm btn-delete" title="Delete Invoice"
+                                           onclick="return confirm('Delete invoice <?php echo htmlspecialchars($inv['invoice_no']); ?>? This action cannot be undone.')">🗑️</a>
                                     </td>
                                 </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
+                                <?php
+    endforeach; ?>
+                            <?php
+endif; ?>
                         </tbody>
                     </table>
                 </div>
