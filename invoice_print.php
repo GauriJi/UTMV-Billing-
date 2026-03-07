@@ -4,24 +4,101 @@ $db = new Database();
 
 $sale_id = $_GET['id'] ?? 0;
 
-// Get sale details
-$sale = $db->single("SELECT s.*, c.customer_name, c.address as c_address, c.city as c_city, c.state as c_state, c.pincode as c_pincode, c.gstin as c_gstin, c.phone as c_phone 
-                     FROM sales s 
-                     LEFT JOIN customers c ON s.customer_id = c.id 
-                     WHERE s.id = ?", [$sale_id]);
+$sale = $db->single("SELECT s.*, 
+    c.customer_name, c.address as c_address, c.city as c_city, 
+    c.state as c_state, c.pincode as c_pincode, c.gstin as c_gstin, 
+    c.phone as c_phone, c.contact_person as c_contact,
+    s.customer_name_manual
+    FROM sales s 
+    LEFT JOIN customers c ON s.customer_id = c.id 
+    WHERE s.id = ?", [$sale_id]);
 
 if (!$sale) {
     die("Invoice not found");
 }
 
-// Get sale items
-$items = $db->fetchAll("SELECT * FROM sales_items WHERE sale_id = ?", [$sale_id]);
-
-// Get company details
+$items = $db->fetchAll("SELECT si.*, p.unit FROM sales_items si LEFT JOIN products p ON si.product_id = p.id WHERE si.sale_id = ?", [$sale_id]);
 $company = $db->single("SELECT * FROM company_settings LIMIT 1");
-
-// Calculate if inter-state or intra-state
 $is_igst = $sale['igst_amount'] > 0;
+
+$cust_name = $sale['customer_name'] ?? $sale['customer_name_manual'] ?? 'Walk-in Customer';
+
+function numberToWords($num)
+{
+    $num = round($num, 2);
+    $parts = explode('.', number_format($num, 2, '.', ''));
+    $rupees = (int)str_replace(',', '', $parts[0]);
+    $paise = (int)$parts[1];
+    $ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+        'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    $tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    $cg = function ($n) use ($ones, $tens) {
+        $out = '';
+        if ($n >= 100) {
+            $out .= $ones[intval($n / 100)] . ' Hundred ';
+            $n %= 100;
+        }
+        if ($n >= 20) {
+            $out .= $tens[intval($n / 10)] . ' ';
+            $n %= 10;
+        }
+        if ($n > 0) {
+            $out .= $ones[$n] . ' ';
+        }
+        return $out;
+    };
+    $words = '';
+    if ($rupees >= 10000000) {
+        $words .= $cg(intval($rupees / 10000000)) . 'Crore ';
+        $rupees %= 10000000;
+    }
+    if ($rupees >= 100000) {
+        $words .= $cg(intval($rupees / 100000)) . 'Lakh ';
+        $rupees %= 100000;
+    }
+    if ($rupees >= 1000) {
+        $words .= $cg(intval($rupees / 1000)) . 'Thousand ';
+        $rupees %= 1000;
+    }
+    if ($rupees > 0) {
+        $words .= $cg($rupees);
+    }
+    $result = 'INR ' . trim($words) . ' ';
+    if ($paise > 0)
+        $result .= 'and ' . $cg($paise) . 'Paise ';
+    return trim($result) . ' Only';
+}
+
+$amount_in_words = numberToWords($sale['grand_total']);
+
+$hsn_groups = [];
+foreach ($items as $item) {
+    $hsn = $item['hsn_code'] ?: '-';
+    if (!isset($hsn_groups[$hsn])) {
+        $hsn_groups[$hsn] = ['taxable' => 0, 'cgst_rate' => 0, 'cgst' => 0, 'sgst_rate' => 0, 'sgst' => 0, 'igst_rate' => 0, 'igst' => 0, 'total_tax' => 0];
+    }
+    $hsn_groups[$hsn]['taxable'] += $item['amount'];
+    $hsn_groups[$hsn]['cgst_rate'] = $item['gst_rate'] / 2;
+    $hsn_groups[$hsn]['cgst'] += $item['cgst'];
+    $hsn_groups[$hsn]['sgst_rate'] = $item['gst_rate'] / 2;
+    $hsn_groups[$hsn]['sgst'] += $item['sgst'];
+    $hsn_groups[$hsn]['igst_rate'] = $item['gst_rate'];
+    $hsn_groups[$hsn]['igst'] += $item['igst'];
+    $hsn_groups[$hsn]['total_tax'] += $item['cgst'] + $item['sgst'] + $item['igst'];
+}
+
+$state_codes = [
+    'jammu and kashmir' => '01', 'himachal pradesh' => '02', 'punjab' => '03', 'chandigarh' => '04',
+    'uttarakhand' => '05', 'haryana' => '06', 'delhi' => '07', 'rajasthan' => '08', 'uttar pradesh' => '09',
+    'bihar' => '10', 'sikkim' => '11', 'arunachal pradesh' => '12', 'nagaland' => '13', 'manipur' => '14',
+    'mizoram' => '15', 'tripura' => '16', 'meghalaya' => '17', 'assam' => '18', 'west bengal' => '19',
+    'jharkhand' => '20', 'odisha' => '21', 'chhattisgarh' => '22', 'madhya pradesh' => '23',
+    'gujarat' => '24', 'dadra and nagar haveli' => '26', 'maharashtra' => '27', 'andhra pradesh' => '28',
+    'karnataka' => '29', 'goa' => '30', 'lakshadweep' => '31', 'kerala' => '32', 'tamil nadu' => '33',
+    'puducherry' => '34', 'andaman and nicobar islands' => '35', 'telangana' => '36',
+];
+$co_state_code = $state_codes[strtolower(trim($company['state'] ?? ''))] ?? '05';
+$cu_state_code = $state_codes[strtolower(trim($sale['c_state'] ?? ''))] ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -30,387 +107,406 @@ $is_igst = $sale['igst_amount'] > 0;
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tax Invoice - <?php echo $sale['invoice_no']; ?></title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            padding: 20px;
-            background: #f5f5f5;
-        }
-        
-        .invoice-container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: white;
-            padding: 40px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.1);
-        }
-        
-        .invoice-header {
-            text-align: center;
-            border-bottom: 3px solid #2563eb;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .invoice-header h1 {
-            color: #2563eb;
-            font-size: 28px;
-            margin-bottom: 5px;
-        }
-        
-        .invoice-header .tax-invoice {
-    font-size: 40px;
-    font-weight: 900;
-    color: #000;
-    text-align: center;
-    letter-spacing: 3px;
-    margin-top: 10px;
-}
-        
-        .company-details {
-            background: #f8fafc;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        
-        .company-details h2 {
-            color: #1e293b;
-            font-size: 22px;
-            margin-bottom: 10px;
-        }
-        
-        .company-details p {
-            color: #475569;
-            line-height: 1.6;
-            margin: 3px 0;
-        }
-        
-        .info-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .info-box {
-            border: 1px solid #e2e8f0;
-            padding: 15px;
-            border-radius: 6px;
-        }
-        
-        .info-box h3 {
-            color: #2563eb;
-            font-size: 14px;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-            border-bottom: 2px solid #2563eb;
-            padding-bottom: 5px;
-        }
-        
-        .info-box p {
-            color: #334155;
-            margin: 5px 0;
-            font-size: 14px;
-        }
-        
-        .items-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-        }
-        
-        .items-table thead {
-            background: #2563eb;
-            color: white;
-        }
-        
-        .items-table th,
-        .items-table td {
-            padding: 12px 8px;
-            text-align: left;
-            border: 1px solid #e2e8f0;
-            font-size: 13px;
-        }
-        
-        .items-table th {
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 11px;
-        }
-        
-        .items-table tbody tr:nth-child(even) {
-            background: #f8fafc;
-        }
-        
-        .items-table tbody tr:hover {
-            background: #f1f5f9;
-        }
-        
-        .text-right {
-            text-align: right !important;
-        }
-        
-        .text-center {
-            text-align: center !important;
-        }
-        
-        .totals-section {
-            display: flex;
-            justify-content: flex-end;
-            margin-bottom: 30px;
-        }
-        
-        .totals-table {
-            width: 350px;
-            border-collapse: collapse;
-        }
-        
-        .totals-table td {
-            padding: 10px 15px;
-            border: 1px solid #e2e8f0;
-        }
-        
-        .totals-table tr.grand-total {
-            background: #2563eb;
-            color: white;
-            font-weight: 700;
-            font-size: 16px;
-        }
-        
-        .totals-table tr.gst-row {
-            background: #f1f5f9;
-        }
-        
-        .footer-notes {
-            border-top: 2px solid #e2e8f0;
-            padding-top: 20px;
-            margin-top: 40px;
-        }
-        
-        .footer-notes h4 {
-            color: #1e293b;
-            margin-bottom: 10px;
-        }
-        
-        .footer-notes p {
-            color: #64748b;
-            font-size: 13px;
-            line-height: 1.5;
-        }
-        
-        .signature-section {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 50px;
-        }
-        
-        .signature-box {
-            text-align: center;
-        }
-        
-        .signature-box .line {
-            width: 200px;
-            border-top: 1px solid #333;
-            margin-top: 50px;
-            margin-bottom: 5px;
-        }
-        
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: Arial, sans-serif; font-size:11px; background:#f0f0f0; padding:10px; color:#000; }
+
+        .invoice-wrap { max-width:980px; margin:0 auto; background:#fff; border:2px solid #000; }
+
         .print-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #2563eb;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            font-size: 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position:fixed; top:20px; right:20px;
+            background:#2563eb; color:#fff; border:none;
+            padding:10px 20px; font-size:14px; border-radius:6px;
+            cursor:pointer; z-index:999; box-shadow:0 2px 8px rgba(0,0,0,0.2);
         }
-        
-        .print-btn:hover {
-            background: #1d4ed8;
+        .print-btn:hover { background:#1d4ed8; }
+
+        /* Header */
+        .inv-header { display:grid; grid-template-columns:130px 1fr 240px; border-bottom:1.5px solid #000; }
+        .hdr-logo { padding:10px; border-right:1px solid #000; display:flex; align-items:center; justify-content:center; }
+        .hdr-logo img { max-width:110px; max-height:60px; }
+        .hdr-company { padding:8px 12px; border-right:1px solid #000; }
+        .hdr-company .co-name { font-size:14px; font-weight:700; margin-bottom:3px; }
+        .hdr-company p { line-height:1.5; color:#111; }
+        .hdr-title { padding:8px; text-align:center; }
+        .hdr-title .title-text { font-size:16px; font-weight:700; margin-bottom:6px; }
+        .hdr-title .orig-badge { font-size:9px; font-weight:700; border:1px solid #000; padding:2px 6px; display:inline-block; margin-bottom:8px; }
+        .hdr-inv-meta table { width:100%; border-collapse:collapse; }
+        .hdr-inv-meta td { padding:2px 4px; vertical-align:middle; font-size:10px; text-align:left; }
+        .hdr-inv-meta .lbl { font-weight:700; white-space:nowrap; width:1%; }
+        .hdr-inv-meta .val { text-align:left; }
+
+        /* Parties */
+        .party-row { display:grid; grid-template-columns:1fr 1fr; border-bottom:1.5px solid #000; }
+        .party-box { padding:8px 10px; }
+        .party-box:first-child { border-right:1px solid #000; }
+        .party-box .party-label { font-size:10px; font-weight:700; text-decoration:underline; margin-bottom:4px; }
+        .party-box p { line-height:1.6; }
+        .party-box .pname { font-size:12px; font-weight:700; }
+
+        /* Items table */
+        .items-table { width:100%; border-collapse:collapse; border-bottom:1.5px solid #000; }
+        .items-table th {
+            background:#000; color:#fff; padding:6px 5px; text-align:center;
+            font-size:10px; font-weight:700; border:1px solid #000;
+            print-color-adjust:exact; -webkit-print-color-adjust:exact;
         }
-        
+        .items-table td { padding:5px; border:1px solid #ccc; font-size:10px; vertical-align:top; }
+        .items-table tbody tr:nth-child(even) { background:#fafafa; }
+        .items-table tfoot td { font-weight:700; border-top:1.5px solid #000; border:1px solid #000; padding:5px; }
+        .text-right  { text-align:right !important; }
+        .text-center { text-align:center !important; }
+
+        /* Editable fields — type before printing */
+        .meta-input, .batch-input {
+            border:none; border-bottom:1px dashed #aaa; background:transparent;
+            font-size:10px; font-family:Arial,sans-serif; outline:none;
+            color:#000; width:100%; text-align:left;
+        }
+        .batch-input { width:80px; text-align:center; font-style:italic; }
+        .meta-input:focus, .batch-input:focus { border-bottom:1px solid #2563eb; }
+        .meta-input::placeholder { color:#bbb; font-style:italic; }
+        .batch-input::placeholder { color:#bbb; font-style:italic; }
+
+        /* Amount row */
+        .amount-row {
+            display:flex; justify-content:space-between; align-items:center;
+            padding:6px 10px; border-bottom:1.5px solid #000; background:#f8f8f8;
+        }
+        .amount-words { font-size:10px; }
+        .amount-words strong { font-size:11px; }
+
+        /* Tax table */
+        .tax-section { border-bottom:1.5px solid #000; }
+        .tax-section table { width:100%; border-collapse:collapse; }
+        .tax-section th {
+            background:#000; color:#fff; padding:5px 6px;
+            font-size:10px; border:1px solid #000; text-align:center;
+            print-color-adjust:exact; -webkit-print-color-adjust:exact;
+        }
+        .tax-section td { padding:5px 6px; border:1px solid #ccc; font-size:10px; text-align:center; }
+        .tax-section tfoot td { font-weight:700; border-top:1.5px solid #000; border:1px solid #000; }
+
+        /* Footer */
+        .footer-row { display:grid; grid-template-columns:1fr 1fr; }
+        .footer-left { padding:10px; border-right:1px solid #000; }
+        .footer-left h4 { font-size:11px; font-weight:700; margin-bottom:6px; border-bottom:1px solid #ccc; padding-bottom:3px; }
+        .footer-left p { line-height:1.8; font-size:10px; }
+        .footer-right { padding:10px; }
+        .footer-right h4 { font-size:11px; font-weight:700; margin-bottom:5px; text-align:right; }
+        .sig-area { height:60px; }
+        .footer-right p { font-size:10px; text-align:right; margin-top:4px; }
+
+        .bottom-bar { text-align:center; padding:4px; font-size:9px; color:#555; font-style:italic; }
+
         @media print {
-            body {
-                background: white;
-                padding: 0;
+            body { background:#fff; padding:0; }
+            .print-btn { display:none; }
+            .invoice-wrap { max-width:100%; border:2px solid #000; box-shadow:none; }
+            .items-table th, .tax-section th {
+                background:#000 !important; color:#fff !important;
+                print-color-adjust:exact !important; -webkit-print-color-adjust:exact !important;
             }
-            
-            .invoice-container {
-                box-shadow: none;
-                padding: 20px;
-            }
-            
-            .print-btn {
-                display: none;
-            }
+            /* On print, all inputs look like plain text — no border, no placeholder */
+            .batch-input, .meta-input { border:none; }
+            .meta-input::placeholder, .batch-input::placeholder { color:transparent; }
         }
     </style>
 </head>
 <body>
-    <button class="print-btn" onclick="window.print()">🖨️ Print Invoice</button>
-    
-    <div class="invoice-container">
-        <div class="invoice-header">
-    <div style="display:flex; align-items:center; justify-content:space-between;">
-        <div>
-            <img src="UTMV-LOGO.png" alt="Company Logo" style="height:70px;">
+
+<button class="print-btn" onclick="window.print()">🖨️ Print / Save PDF</button>
+
+<div class="invoice-wrap">
+
+    <!-- HEADER -->
+    <div class="inv-header">
+        <div class="hdr-logo">
+            <?php if (!empty($company['logo_path']) && file_exists($company['logo_path'])): ?>
+                <img src="<?php echo htmlspecialchars($company['logo_path']); ?>" alt="Logo">
+            <?php
+else: ?>
+                <img src="UTMV-LOGO.png" alt="Logo" onerror="this.style.display='none'">
+            <?php
+endif; ?>
         </div>
-        <div style="text-align:center; flex:1;">
-            
-            <div class="tax-invoice">TAX INVOICE</div>
+
+        <div class="hdr-company">
+            <div class="co-name"><?php echo htmlspecialchars($company['company_name']); ?></div>
+            <p><?php echo htmlspecialchars($company['address']); ?></p>
+            <p><?php echo htmlspecialchars($company['city']); ?><?php if ($company['pincode']): ?> - <?php echo htmlspecialchars($company['pincode']); ?><?php
+endif; ?></p>
+            <p>Mob: <?php echo htmlspecialchars($company['phone']); ?></p>
+            <?php if ($company['email']): ?><p>E-Mail: <?php echo htmlspecialchars($company['email']); ?></p><?php
+endif; ?>
+            <p>GSTIN/UIN: <strong><?php echo htmlspecialchars($company['gstin']); ?></strong></p>
+            <p>State Name: <?php echo htmlspecialchars($company['state']); ?>, Code: <?php echo $co_state_code; ?></p>
+        </div>
+
+        <div class="hdr-title">
+            <div class="title-text">Tax Invoice</div>
+            <div class="orig-badge">ORIGINAL FOR RECIPIENT</div>
+            <div class="hdr-inv-meta">
+                <table>
+                    <tr>
+                        <td class="lbl">Invoice No.</td>
+                        <td><?php echo htmlspecialchars($sale['invoice_no']); ?></td>
+                    </tr>
+                    <tr>
+                        <td class="lbl">Dated</td>
+                        <td><?php echo date('d-M-y', strtotime($sale['sale_date'])); ?></td>
+                    </tr>
+                    <tr>
+                        <td class="lbl">Delivery Note</td>
+                        <td><input type="text" class="meta-input" placeholder="Enter delivery note..."></td>
+                    </tr>
+                    <tr>
+                        <td class="lbl">Buyer's Order No.</td>
+                        <td><input type="text" class="meta-input" placeholder="Enter order no..."></td>
+                    </tr>
+                    <tr>
+                        <td class="lbl">Dispatch Doc No.</td>
+                        <td><input type="text" class="meta-input" placeholder="Enter doc no..."></td>
+                    </tr>
+                    <tr>
+                        <td class="lbl">Dispatched through</td>
+                        <td><input type="text" class="meta-input" placeholder="e.g. DTDC, By Hand..."></td>
+                    </tr>
+                    <tr>
+                        <td class="lbl">Destination</td>
+                        <td><input type="text" class="meta-input" value="<?php echo htmlspecialchars($sale['c_city'] ?? ''); ?>" placeholder="Destination city..."></td>
+                    </tr>
+                </table>
+            </div>
         </div>
     </div>
-</div>
-        
-        <div class="info-grid">
 
-    <!-- Seller Details -->
-    <div class="info-box">
-        <h3>Seller Details</h3>
-        <p><strong><?php echo htmlspecialchars($company['company_name']); ?></strong></p>
-        <p><strong>Address:</strong> <?php echo htmlspecialchars($company['address']); ?></p>
-        <p>
-            <strong>City:</strong> <?php echo htmlspecialchars($company['city']); ?>, 
-            <strong>State:</strong> <?php echo htmlspecialchars($company['state']); ?> - 
-            <?php echo htmlspecialchars($company['pincode']); ?>
-        </p>
-        <p>
-            <strong>Phone:</strong> <?php echo htmlspecialchars($company['phone']); ?> | 
-            <strong>Email:</strong> <?php echo htmlspecialchars($company['email']); ?>
-        </p>
-        <p><strong>GSTIN:</strong> <?php echo htmlspecialchars($company['gstin']); ?></p>
+    <!-- CONSIGNEE / BUYER -->
+    <div class="party-row">
+        <div class="party-box">
+            <div class="party-label">Consignee (Ship to)</div>
+            <p class="pname"><?php echo htmlspecialchars($cust_name); ?></p>
+            <?php if ($sale['c_address']): ?><p><?php echo htmlspecialchars($sale['c_address']); ?></p><?php
+endif; ?>
+            <?php if ($sale['c_city'] || $sale['c_state']): ?>
+            <p><?php echo htmlspecialchars($sale['c_city']); ?><?php if ($sale['c_city'] && $sale['c_state']): ?>, <?php
+    endif; ?><?php echo htmlspecialchars($sale['c_state'] ?? ''); ?></p>
+            <?php
+endif; ?>
+            <?php if ($sale['c_phone']): ?><p>MOB: <?php echo htmlspecialchars($sale['c_phone']); ?></p><?php
+endif; ?>
+            <?php if ($sale['c_gstin']): ?><p>GSTIN/UIN: <strong><?php echo htmlspecialchars($sale['c_gstin']); ?></strong></p><?php
+endif; ?>
+            <?php if ($sale['c_state']): ?><p>State Name: <?php echo htmlspecialchars($sale['c_state']); ?><?php if ($cu_state_code): ?>, Code: <?php echo $cu_state_code; ?><?php
+    endif; ?></p><?php
+endif; ?>
+        </div>
+        <div class="party-box">
+            <div class="party-label">Buyer (Bill to)</div>
+            <p class="pname"><?php echo htmlspecialchars($cust_name); ?></p>
+            <?php if ($sale['c_address']): ?><p><?php echo htmlspecialchars($sale['c_address']); ?></p><?php
+endif; ?>
+            <?php if ($sale['c_city'] || $sale['c_state']): ?>
+            <p><?php echo htmlspecialchars($sale['c_city']); ?><?php if ($sale['c_city'] && $sale['c_state']): ?>, <?php
+    endif; ?><?php echo htmlspecialchars($sale['c_state'] ?? ''); ?></p>
+            <?php
+endif; ?>
+            <?php if ($sale['c_phone']): ?><p>MOB: <?php echo htmlspecialchars($sale['c_phone']); ?></p><?php
+endif; ?>
+            <?php if ($sale['c_gstin']): ?><p>GSTIN/UIN: <strong><?php echo htmlspecialchars($sale['c_gstin']); ?></strong></p><?php
+endif; ?>
+            <?php if ($sale['c_state']): ?><p>State Name: <?php echo htmlspecialchars($sale['c_state']); ?><?php if ($cu_state_code): ?>, Code: <?php echo $cu_state_code; ?><?php
+    endif; ?></p><?php
+endif; ?>
+        </div>
     </div>
 
-    <!-- Invoice Details -->
-    <div class="info-box">
-        <h3>Invoice Details</h3>
-        <p><strong>Invoice No:</strong> <?php echo htmlspecialchars($sale['invoice_no']); ?></p>
-        <p><strong>Invoice Date:</strong> <?php echo date('d-M-Y', strtotime($sale['sale_date'])); ?></p>
-        <p>
-            <strong>Payment Status:</strong> 
-            <span style="color: <?php echo $sale['payment_status'] == 'paid' ? 'green' : 'orange'; ?>; font-weight: bold;">
-                <?php echo strtoupper($sale['payment_status']); ?>
-            </span>
-        </p>
+    <!-- ITEMS TABLE — includes Batch No column (manually editable before print) -->
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th style="width:4%">Sl No</th>
+                <th style="width:30%">Description of Goods</th>
+                <th style="width:10%">HSN/SAC</th>
+                <th style="width:10%">Batch No.</th>
+                <th style="width:8%">Quantity</th>
+                <th style="width:5%">per</th>
+                <th style="width:10%">Rate</th>
+                <th style="width:5%">Disc %</th>
+                <th style="width:12%">Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php $sr = 1;
+$total_qty = 0;
+foreach ($items as $item):
+    $total_qty += $item['quantity']; ?>
+            <tr>
+                <td class="text-center"><?php echo $sr++; ?></td>
+                <td><strong><?php echo htmlspecialchars($item['product_name']); ?></strong></td>
+                <td class="text-center"><?php echo htmlspecialchars($item['hsn_code']); ?></td>
+                <td class="text-center">
+                    <!-- Editable before printing — value is typed manually -->
+                    <input type="text" class="batch-input" placeholder="Batch No." title="Type batch number before printing">
+                </td>
+                <td class="text-center"><?php echo $item['quantity']; ?> <?php echo htmlspecialchars($item['unit'] ?? 'Nos.'); ?></td>
+                <td class="text-center"><?php echo htmlspecialchars($item['unit'] ?? 'Nos.'); ?></td>
+                <td class="text-right">₹<?php echo number_format($item['rate'], 2); ?></td>
+                <td class="text-center">-</td>
+                <td class="text-right">₹<?php echo number_format($item['amount'], 2); ?></td>
+            </tr>
+            <?php
+endforeach; ?>
+
+            <?php for ($i = 0; $i < max(0, 8 - count($items)); $i++): ?>
+            <tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+            <?php
+endfor; ?>
+
+            <?php if ($is_igst): ?>
+            <tr>
+                <td colspan="7" style="text-align:right;font-weight:700;border:none;">IGST</td>
+                <td></td>
+                <td class="text-right" style="font-weight:700;">₹<?php echo number_format($sale['igst_amount'], 2); ?></td>
+            </tr>
+            <?php
+else: ?>
+            <tr>
+                <td colspan="7" style="text-align:right;font-weight:700;border:none;">CGST</td>
+                <td></td>
+                <td class="text-right" style="font-weight:700;">₹<?php echo number_format($sale['cgst_amount'], 2); ?></td>
+            </tr>
+            <tr>
+                <td colspan="7" style="text-align:right;font-weight:700;border:none;">SGST</td>
+                <td></td>
+                <td class="text-right" style="font-weight:700;">₹<?php echo number_format($sale['sgst_amount'], 2); ?></td>
+            </tr>
+            <?php
+endif; ?>
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="3" style="text-align:center;font-weight:700;">Total</td>
+                <td></td>
+                <td class="text-center" style="font-weight:700;"><?php echo $total_qty; ?> Nos.</td>
+                <td></td><td></td><td></td>
+                <td class="text-right" style="font-size:12px;">₹<?php echo number_format($sale['grand_total'], 2); ?></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <!-- AMOUNT IN WORDS -->
+    <div class="amount-row">
+        <div class="amount-words">
+            Amount Chargeable (in words)<br>
+            <strong><?php echo $amount_in_words; ?></strong>
+        </div>
+        <div style="font-size:9px;color:#555;">E &amp; O.E</div>
     </div>
 
-    <!-- Bill To -->
-    <div class="info-box">
-        <h3>Bill To</h3>
-        <p><strong><?php echo htmlspecialchars($sale['customer_name'] ?? 'Walk-in Customer'); ?></strong></p>
-
-        <?php if ($sale['c_address']): ?>
-        <p><?php echo htmlspecialchars($sale['c_address']); ?></p>
-        <p>
-            <?php echo htmlspecialchars($sale['c_city']); ?>, 
-            <?php echo htmlspecialchars($sale['c_state']); ?> - 
-            <?php echo htmlspecialchars($sale['c_pincode']); ?>
-        </p>
-        <?php endif; ?>
-
-        <?php if ($sale['c_phone']): ?>
-        <p><strong>Phone:</strong> <?php echo htmlspecialchars($sale['c_phone']); ?></p>
-        <?php endif; ?>
-
-        <?php if ($sale['c_gstin']): ?>
-        <p><strong>GSTIN:</strong> <?php echo htmlspecialchars($sale['c_gstin']); ?></p>
-        <?php endif; ?>
-    </div>
-
-</div>
-        
-        <table class="items-table">
+    <!-- TAX BREAKDOWN -->
+    <div class="tax-section">
+        <table>
             <thead>
                 <tr>
-                    <th style="width: 5%">S.No</th>
-                    <th style="width: 35%">Product/Service</th>
-                    <th style="width: 12%">HSN/SAC</th>
-                    <th style="width: 8%" class="text-center">Qty</th>
-                    <th style="width: 12%" class="text-right">Rate</th>
-                    <th style="width: 8%" class="text-center">GST %</th>
-                    <th style="width: 12%" class="text-right">Amount</th>
-                    <th style="width: 8%" class="text-right">Total</th>
+                    <th rowspan="2">HSN/SAC</th>
+                    <th rowspan="2">Taxable Value</th>
+                    <?php if ($is_igst): ?>
+                    <th colspan="2">IGST</th>
+                    <?php
+else: ?>
+                    <th colspan="2">CGST</th>
+                    <th colspan="2">SGST/UTGST</th>
+                    <?php
+endif; ?>
+                    <th rowspan="2">Total Tax Amount</th>
+                </tr>
+                <tr>
+                    <?php if ($is_igst): ?>
+                    <th>Rate</th><th>Amount</th>
+                    <?php
+else: ?>
+                    <th>Rate</th><th>Amount</th>
+                    <th>Rate</th><th>Amount</th>
+                    <?php
+endif; ?>
                 </tr>
             </thead>
             <tbody>
-                <?php $sr = 1; foreach ($items as $item): ?>
+                <?php foreach ($hsn_groups as $hsn => $g): ?>
                 <tr>
-                    <td class="text-center"><?php echo $sr++; ?></td>
-                    <td><?php echo htmlspecialchars($item['product_name']); ?></td>
-                    <td><?php echo htmlspecialchars($item['hsn_code']); ?></td>
-                    <td class="text-center"><?php echo $item['quantity']; ?></td>
-                    <td class="text-right">₹<?php echo number_format($item['rate'], 2); ?></td>
-                    <td class="text-center"><?php echo $item['gst_rate']; ?>%</td>
-                    <td class="text-right">₹<?php echo number_format($item['amount'], 2); ?></td>
-                    <td class="text-right"><strong>₹<?php echo number_format($item['total'], 2); ?></strong></td>
+                    <td><?php echo htmlspecialchars($hsn); ?></td>
+                    <td class="text-right">₹<?php echo number_format($g['taxable'], 2); ?></td>
+                    <?php if ($is_igst): ?>
+                    <td class="text-center"><?php echo $g['igst_rate']; ?>%</td>
+                    <td class="text-right">₹<?php echo number_format($g['igst'], 2); ?></td>
+                    <?php
+    else: ?>
+                    <td class="text-center"><?php echo $g['cgst_rate']; ?>%</td>
+                    <td class="text-right">₹<?php echo number_format($g['cgst'], 2); ?></td>
+                    <td class="text-center"><?php echo $g['sgst_rate']; ?>%</td>
+                    <td class="text-right">₹<?php echo number_format($g['sgst'], 2); ?></td>
+                    <?php
+    endif; ?>
+                    <td class="text-right">₹<?php echo number_format($g['total_tax'], 2); ?></td>
                 </tr>
-                <?php endforeach; ?>
+                <?php
+endforeach; ?>
             </tbody>
-        </table>
-        
-        <div class="totals-section">
-            <table class="totals-table">
+            <tfoot>
                 <tr>
-                    <td><strong>Taxable Amount</strong></td>
+                    <td><strong>Total</strong></td>
                     <td class="text-right"><strong>₹<?php echo number_format($sale['total_amount'], 2); ?></strong></td>
+                    <?php if ($is_igst): ?>
+                    <td></td>
+                    <td class="text-right"><strong>₹<?php echo number_format($sale['igst_amount'], 2); ?></strong></td>
+                    <?php
+else: ?>
+                    <td></td>
+                    <td class="text-right"><strong>₹<?php echo number_format($sale['cgst_amount'], 2); ?></strong></td>
+                    <td></td>
+                    <td class="text-right"><strong>₹<?php echo number_format($sale['sgst_amount'], 2); ?></strong></td>
+                    <?php
+endif; ?>
+                    <td class="text-right"><strong>₹<?php echo number_format($sale['cgst_amount'] + $sale['sgst_amount'] + $sale['igst_amount'], 2); ?></strong></td>
                 </tr>
-                <?php if ($is_igst): ?>
-                <tr class="gst-row">
-                    <td>IGST</td>
-                    <td class="text-right">₹<?php echo number_format($sale['igst_amount'], 2); ?></td>
-                </tr>
-                <?php else: ?>
-                <tr class="gst-row">
-                    <td>CGST</td>
-                    <td class="text-right">₹<?php echo number_format($sale['cgst_amount'], 2); ?></td>
-                </tr>
-                <tr class="gst-row">
-                    <td>SGST</td>
-                    <td class="text-right">₹<?php echo number_format($sale['sgst_amount'], 2); ?></td>
-                </tr>
-                <?php endif; ?>
-                <tr class="grand-total">
-                    <td>GRAND TOTAL</td>
-                    <td class="text-right">₹<?php echo number_format($sale['grand_total'], 2); ?></td>
-                </tr>
-            </table>
+            </tfoot>
+        </table>
+    </div>
+
+    <!-- Tax amount in words -->
+    <div style="padding:4px 10px;font-size:10px;border-bottom:1px solid #ccc;">
+        Tax Amount (in words): <strong><?php echo numberToWords($sale['cgst_amount'] + $sale['sgst_amount'] + $sale['igst_amount']); ?></strong>
+    </div>
+
+    <!-- FOOTER: Bank Details + Signature -->
+    <div class="footer-row">
+        <div class="footer-left">
+            <h4>Company's Bank Details</h4>
+            <p><strong>A/c Name &nbsp;&nbsp;&nbsp;:</strong> UT MEDIA VENTURES</p>
+            <p><strong>A/c No. &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</strong> 024005002580</p>
+            <p><strong>IFSC Code &nbsp;&nbsp;:</strong> ICIC0000240</p>
+            <p><strong>Type &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</strong> Current</p>
+            <p><strong>Bank Name &nbsp;&nbsp;:</strong> ICICI Bank</p>
+            <p><strong>Branch Name :</strong> Haldwani</p>
         </div>
-        
-        <?php if ($sale['notes']): ?>
-        <div class="footer-notes">
-            <h4>Notes:</h4>
-            <p><?php echo nl2br(htmlspecialchars($sale['notes'])); ?></p>
-        </div>
-        <?php endif; ?>
-        
-        <div class="footer-notes">
-            <h4>Terms & Conditions:</h4>
-            <p>1. Goods once sold will not be taken back or exchanged</p>
-            <p>2. All disputes are subject to local jurisdiction only</p>
-            <p>3. Payment due within 30 days from the date of invoice</p>
-        </div>
-        
-        <div class="signature-section">
-            <div class="signature-box">
-                <p><strong>Customer Signature</strong></p>
-                <div class="line"></div>
-            </div>
-            <div class="signature-box">
-                <p><strong>Authorized Signatory</strong></p>
-                <div class="line"></div>
-                <p style="margin-top: 10px;">For <?php echo htmlspecialchars($company['company_name']); ?></p>
-            </div>
+        <div class="footer-right">
+            <h4>for <?php echo htmlspecialchars($company['company_name']); ?></h4>
+            <div class="sig-area"></div>
+            <p><strong>Authorised Signatory</strong></p>
+            <br><br>
+            <p style="text-align:left;border-top:1px solid #ccc;padding-top:6px;margin-top:8px;">Customer's Seal and Signature</p>
         </div>
     </div>
+
+    <?php if ($sale['notes']): ?>
+    <div style="padding:6px 10px;font-size:10px;border-top:1px solid #ccc;">
+        <strong>Notes:</strong> <?php echo nl2br(htmlspecialchars($sale['notes'])); ?>
+    </div>
+    <?php
+endif; ?>
+
+    <div class="bottom-bar">This is a Computer Generated Invoice</div>
+
+</div>
 </body>
 </html>
