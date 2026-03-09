@@ -14,26 +14,41 @@
     </div>
 
     <ul class="nav-menu">
-
+        <!-- Dashboard -->
         <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'index.php' ? 'active' : ''; ?>">
             <a href="index.php"><span class="nav-icon">📊</span><span class="nav-text">Dashboard</span></a>
         </li>
 
+        <!-- ─── SALES GROUP ─────────────────────────── -->
+        <li class="nav-group-label">Sales</li>
+
         <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'sales.php' ? 'active' : ''; ?>">
-            <a href="sales.php"><span class="nav-icon">💰</span><span class="nav-text">Sales Invoice</span></a>
+            <a href="sales.php"><span class="nav-icon">💰</span><span class="nav-text">New Sale Invoice</span></a>
         </li>
 
         <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'invoices.php' ? 'active' : ''; ?>">
             <a href="invoices.php"><span class="nav-icon">🧾</span><span class="nav-text">All Invoices</span></a>
         </li>
-        
-        
 
+        <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'payments_received.php' ? 'active' : ''; ?>">
+            <a href="payments_received.php"><span class="nav-icon">💳</span><span class="nav-text">Payments Received</span></a>
+        </li>
+
+        <!-- ─── PURCHASE GROUP ────────────────────────── -->
         <?php if (isAdmin()): ?>
+        <li class="nav-group-label">Purchase</li>
+
         <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'purchase.php' ? 'active' : ''; ?>">
-            <a href="purchase.php"><span class="nav-icon">🛒</span><span class="nav-text">Purchase Entry</span></a>
+            <a href="purchase.php"><span class="nav-icon">🛒</span><span class="nav-text">New Purchase</span></a>
+        </li>
+
+        <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'payments_made.php' ? 'active' : ''; ?>">
+            <a href="payments_made.php"><span class="nav-icon">💸</span><span class="nav-text">Payments Made</span></a>
         </li>
         <?php endif; ?>
+
+        <!-- ─── MASTER DATA ───────────────────────────── -->
+        <li class="nav-group-label">Master Data</li>
 
         <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'products.php' ? 'active' : ''; ?>">
             <a href="products.php"><span class="nav-icon">📦</span><span class="nav-text">Products</span></a>
@@ -47,11 +62,23 @@
         <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'suppliers.php' ? 'active' : ''; ?>">
             <a href="suppliers.php"><span class="nav-icon">🏭</span><span class="nav-text">Suppliers</span></a>
         </li>
+        <?php endif; ?>
+
+        <!-- ─── REPORTS GROUP ─────────────────────────── -->
+        <?php if (isAdmin()): ?>
+        <li class="nav-group-label">Reports</li>
 
         <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'reports.php' ? 'active' : ''; ?>">
             <a href="reports.php"><span class="nav-icon">📈</span><span class="nav-text">Reports</span></a>
         </li>
+
+        <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'pnl_report.php' ? 'active' : ''; ?>">
+            <a href="pnl_report.php"><span class="nav-icon">📉</span><span class="nav-text">P&amp;L Report</span></a>
+        </li>
         <?php endif; ?>
+
+        <!-- ─── TOOLS GROUP ───────────────────────────── -->
+        <li class="nav-group-label">Tools</li>
 
         <li class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'Calendar.php' ? 'active' : ''; ?>">
             <a href="Calendar.php"><span class="nav-icon">📅</span><span class="nav-text">Calendar</span></a>
