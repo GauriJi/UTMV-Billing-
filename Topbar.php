@@ -17,7 +17,8 @@ $_topbar_title = $page_title ?? basename($_SERVER['PHP_SELF'], '.php');
     </button>
 
     <h2 class="page-title" style="flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-        <?php echo htmlspecialchars($_topbar_title); ?></h2>
+        <?php echo htmlspecialchars($_topbar_title); ?>
+    </h2>
 
     <div style="display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0;">
         <span class="date-display" style="color:#64748b;font-size:14px;font-weight:500;white-space:nowrap;">
@@ -42,13 +43,12 @@ $_topbar_title = $page_title ?? basename($_SERVER['PHP_SELF'], '.php');
         var sidebar = document.querySelector('.sidebar');
         var btn = document.getElementById('hamburgerBtn');
         var backdrop = document.getElementById('sidebarBackdrop');
-        var isOpen = sidebar.classList.contains('open');
-        if (isOpen) {
+        if (sidebar.classList.contains('open')) {
             closeSidebar();
         } else {
             sidebar.classList.add('open');
-            btn.classList.add('open');
-            backdrop.classList.add('active');
+            if (btn) btn.classList.add('open');
+            if (backdrop) backdrop.classList.add('active');
             document.body.style.overflow = 'hidden';
         }
     }
@@ -57,11 +57,15 @@ $_topbar_title = $page_title ?? basename($_SERVER['PHP_SELF'], '.php');
         var btn = document.getElementById('hamburgerBtn');
         var backdrop = document.getElementById('sidebarBackdrop');
         sidebar.classList.remove('open');
-        btn.classList.remove('open');
-        backdrop.classList.remove('active');
+        if (btn) btn.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('active');
         document.body.style.overflow = '';
     }
-    // Close sidebar when a nav link is clicked (good for mobile navigation)
+    // Close on ESC key
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeSidebar();
+    });
+    // Close sidebar when a nav link is clicked (mobile navigation)
     document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('.nav-item a').forEach(function (link) {
             link.addEventListener('click', function () {
